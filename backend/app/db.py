@@ -1,5 +1,28 @@
 import hashlib
+import os
 import secrets
+from psycopg_pool import AsyncConnectionPool
+
+
+def get_database_url() -> str:
+    raw_url = os.environ.get("DATABASE_URL", "").strip()
+    if raw_url.startswith("DATABASE_URL="):
+        raw_url = raw_url.split("=", 1)[1].strip()
+    raw_url = raw_url.strip('"').strip("'")
+    if not raw_url.startswith(("postgresql://", "postgres://")):
+        raise RuntimeError(
+            "Invalid DATABASE_URL: must start with 'postgresql://' or 'postgres://'."
+        )
+    return raw_url
+
+
+def create_db_pool() -> AsyncConnectionPool:
+    conninfo = get_database_url()
+    return AsyncConnectionPool(
+        conninfo=conninfo,
+        open=False,
+        kwargs={"autocommit": True},
+    )
 
 
 def hash_password(password: str) -> str:
@@ -17,7 +40,7 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-async def init_app_tables(pool) -> None:
+async def init_app_tables(pool: AsyncConnectionPool) -> None:
     """Create users, customer_profiles, and run_history tables if they don't exist."""
     async with pool.connection() as conn:
         await conn.execute(
