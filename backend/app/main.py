@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -74,6 +75,23 @@ def get_optional_user(authorization: str | None = Header(default=None)) -> dict 
         return None
 
 
+def _resolve_db_url() -> str:
+    candidate = (
+        os.getenv("DATABASE_URL")
+        or getattr(settings, "database_url", None)
+        or getattr(settings, "DATABASE_URL", "")
+        or ""
+    ).strip()
+    if candidate.startswith("DATABASE_URL="):
+        candidate = candidate.split("=", 1)[1].strip()
+    candidate = candidate.strip('"').strip("'")
+    if not candidate.startswith(("postgresql://", "postgres://")):
+        raise RuntimeError(
+            "Invalid DATABASE_URL: expected a connection string starting with 'postgresql://' or 'postgres://'."
+        )
+    return candidate
+
+
 def _extract_leads(vals: dict, payload_dict: dict | None = None) -> list[dict]:
     p = payload_dict or {}
     return (
@@ -117,21 +135,33 @@ async def _upsert_run_history(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    conninfo = _resolve_db_url()
     pool = AsyncConnectionPool(
-        conninfo=settings.database_url,
+        conninfo=conninfo,
         max_size=10,
         kwargs={"autocommit": True, "prepare_threshold": 0},
         open=False,
     )
-    await pool.open()
-    checkpointer = AsyncPostgresSaver(pool)
-    await checkpointer.setup()
-    await init_app_tables(pool)
+    try:
+        await pool.open()
+        checkpointer = AsyncPostgresSaver(pool)
+        await checkpointer.setup()
+        await init_app_tables(pool)
+    except Exception:
+        print("STARTUP ERROR IN LIFESPAN:", flush=True)
+        traceback.print_exc()
+        try:
+            await pool.close()
+        except Exception:
+            pass
+        raise
 
     app.state.pool = pool
     app.state.graph = build_graph(checkpointer=checkpointer)
-    yield
-    await pool.close()
+    try:
+        yield
+    finally:
+        await pool.close()
 
 
 is_dev = os.getenv("ENV", "production").lower() in ("dev", "development", "local")
