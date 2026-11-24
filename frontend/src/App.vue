@@ -121,6 +121,70 @@ function jump(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* ---------- landing page: scroll animations, progress & scroll-spy ---------- */
+const SECTIONS = [
+  { id: "top", label: "Home" },
+  { id: "features", label: "Features" },
+  { id: "how", label: "How it works" },
+  { id: "control", label: "Budget control" },
+];
+const activeSection = ref("top");
+const scrollPct = ref(0);
+const scrolled = ref(false);
+const showTop = ref(false);
+let revealIO = null;
+
+function onLandingScroll() {
+  const h = document.documentElement;
+  const max = h.scrollHeight - h.clientHeight;
+  scrollPct.value = max > 0 ? Math.min(100, (h.scrollTop / max) * 100) : 0;
+  scrolled.value = h.scrollTop > 12;
+  showTop.value = h.scrollTop > 700;
+  const probe = window.innerHeight * 0.4;
+  let current = "top";
+  for (const s of SECTIONS) {
+    const el = document.getElementById(s.id);
+    if (el && el.getBoundingClientRect().top <= probe) current = s.id;
+  }
+  activeSection.value = current;
+}
+function teardownLanding() {
+  revealIO?.disconnect();
+  revealIO = null;
+  window.removeEventListener("scroll", onLandingScroll);
+  window.removeEventListener("resize", onLandingScroll);
+}
+function setupLanding() {
+  teardownLanding();
+  revealIO = new IntersectionObserver(
+    (entries) =>
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add("in");
+          revealIO.unobserve(e.target);
+        }
+      }),
+    { threshold: 0.12, rootMargin: "0px 0px -6% 0px" }
+  );
+  document.querySelectorAll(".landing .reveal").forEach((el) => revealIO.observe(el));
+  window.addEventListener("scroll", onLandingScroll, { passive: true });
+  window.addEventListener("resize", onLandingScroll);
+  onLandingScroll();
+}
+watch(
+  view,
+  async (v) => {
+    if (v === "landing") {
+      await nextTick();
+      setupLanding();
+    } else {
+      teardownLanding();
+    }
+  },
+  { immediate: true }
+);
+onBeforeUnmount(teardownLanding);
+
 async function fetchProfiles() {
   if (!session.value?.access_token) {
     profiles.value = [];
@@ -519,7 +583,7 @@ function reset() {
 <template>
   <!-- ==================== PUBLIC LANDING PAGE ==================== -->
   <div v-if="view === 'landing'" class="landing">
-    <header class="lp-nav">
+    <header :class="['lp-nav', { scrolled }]">
       <div class="lp-nav-inner">
         <div class="lp-brand" @click="jump('top')">
           <svg width="30" height="30" viewBox="0 0 26 26" aria-hidden="true">
@@ -530,9 +594,9 @@ function reset() {
         </div>
 
         <nav :class="['lp-links', { open: navOpen }]" aria-label="Primary">
-          <button class="lp-link" @click="jump('features')">Features</button>
-          <button class="lp-link" @click="jump('how')">How it works</button>
-          <button class="lp-link" @click="jump('control')">Budget control</button>
+          <button :class="['lp-link', { active: activeSection === 'features' }]" @click="jump('features')">Features</button>
+          <button :class="['lp-link', { active: activeSection === 'how' }]" @click="jump('how')">How it works</button>
+          <button :class="['lp-link', { active: activeSection === 'control' }]" @click="jump('control')">Budget control</button>
           <div class="lp-links-cta">
             <button class="btn" @click="openAuthScreen('login')">Sign in</button>
             <button class="btn primary" @click="openAuthScreen('register')">Get started free</button>
@@ -545,24 +609,39 @@ function reset() {
         </div>
         <button class="lp-burger" aria-label="Menu" @click="navOpen = !navOpen">{{ navOpen ? "✕" : "☰" }}</button>
       </div>
+      <div class="lp-progress" aria-hidden="true"><i :style="{ width: scrollPct + '%' }"></i></div>
     </header>
+
+    <nav class="side-dots" aria-label="Page sections">
+      <button
+        v-for="s in SECTIONS"
+        :key="s.id"
+        type="button"
+        :class="['dot-nav', { active: activeSection === s.id }]"
+        :aria-label="s.label"
+        @click="jump(s.id)"
+      >
+        <span>{{ s.label }}</span>
+      </button>
+    </nav>
+    <button type="button" :class="['to-top', { show: showTop }]" aria-label="Back to top" @click="jump('top')">↑</button>
 
     <!-- HERO -->
     <section id="top" class="lp-hero">
       <div class="lp-hero-bg" aria-hidden="true"></div>
       <div class="lp-wrap lp-hero-grid">
         <div class="lp-hero-copy">
-          <span class="eyebrow"><i></i> AI lead discovery with a spending safety net</span>
-          <h1>Find the right companies. <em>Pay only for the ones worth it.</em></h1>
-          <p class="lede">
+          <span class="eyebrow reveal" style="--d: 0"><i></i> AI lead discovery with a spending safety net</span>
+          <h1 class="reveal" style="--d: 1">Find the right companies. <em>Pay only for the ones worth it.</em></h1>
+          <p class="lede reveal" style="--d: 2">
             Sieve finds and prefilters B2B leads from a plain-English description, pauses for your approval, then enriches,
             scores and writes outreach angles only for the companies you choose.
           </p>
-          <div class="lp-cta-row">
+          <div class="lp-cta-row reveal" style="--d: 3">
             <button class="btn primary lg" @click="openAuthScreen('register')">Create free account</button>
             <button class="btn lg" @click="skipAuthForNow">Try it as a guest →</button>
           </div>
-          <ul class="lp-trust">
+          <ul class="lp-trust reveal" style="--d: 4">
             <li><span class="tick">✓</span> No credit card</li>
             <li><span class="tick">✓</span> Hard $0.25 run cap</li>
             <li><span class="tick">✓</span> One-click CSV export</li>
@@ -570,7 +649,7 @@ function reset() {
         </div>
 
         <!-- Product preview -->
-        <div class="lp-preview" aria-hidden="true">
+        <div class="lp-preview reveal right" style="--d: 2" aria-hidden="true">
           <div class="pv-window">
             <div class="pv-bar"><i></i><i></i><i></i><span>sieve · run #1</span></div>
             <div class="pv-body">
@@ -581,7 +660,7 @@ function reset() {
               </div>
               <div class="pv-dist"><span class="hot" style="width: 50%"></span><span class="warm" style="width: 25%"></span><span class="cold" style="width: 25%"></span></div>
               <ul class="pv-list">
-                <li v-for="(d, i) in DEMO_LEADS" :key="d.domain">
+                <li v-for="(d, i) in DEMO_LEADS" :key="d.domain" :style="{ '--i': i }">
                   <span class="rank">{{ i + 1 }}</span>
                   <span class="logo" :style="{ '--h': hue(d.domain) }"><b>{{ initials(d.name) }}</b></span>
                   <span class="pv-name"><strong>{{ d.name }}</strong><small>{{ d.domain }}</small></span>
@@ -594,28 +673,32 @@ function reset() {
           <div class="pv-float pv-float-b"><span class="tick">✓</span><small>Approved by you</small></div>
         </div>
       </div>
+      <button type="button" class="scroll-cue" aria-label="Scroll to features" @click="jump('features')">
+        <span>Scroll to explore</span>
+        <span class="mouse"><i></i></span>
+      </button>
     </section>
 
     <!-- STATS STRIP -->
     <section class="lp-strip">
       <div class="lp-wrap strip-grid">
-        <div><b>3 steps</b><span>Describe, review, score</span></div>
-        <div><b>0–100</b><span>fit score per lead</span></div>
-        <div><b>$0.25</b><span>hard budget cap per run</span></div>
-        <div><b>100%</b><span>your approval before spend</span></div>
+        <div class="reveal" style="--d: 0"><b>3 steps</b><span>Describe, review, score</span></div>
+        <div class="reveal" style="--d: 1"><b>0–100</b><span>fit score per lead</span></div>
+        <div class="reveal" style="--d: 2"><b>$0.25</b><span>hard budget cap per run</span></div>
+        <div class="reveal" style="--d: 3"><b>100%</b><span>your approval before spend</span></div>
       </div>
     </section>
 
     <!-- FEATURES -->
     <section id="features" class="lp-section">
       <div class="lp-wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <span class="kicker">Features</span>
           <h2>Everything you need to prospect with confidence</h2>
           <p>Built for sales and growth teams who want quality leads without burning through API credits.</p>
         </div>
         <div class="feat-grid">
-          <article v-for="f in FEATURES" :key="f.title" class="feat">
+          <article v-for="(f, i) in FEATURES" :key="f.title" class="feat reveal zoom" :style="{ '--d': i % 3 }">
             <span class="feat-icon">
               <svg v-if="f.icon === 'search'" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
               <svg v-else-if="f.icon === 'filter'" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z" /></svg>
@@ -634,13 +717,13 @@ function reset() {
     <!-- HOW IT WORKS -->
     <section id="how" class="lp-section alt">
       <div class="lp-wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <span class="kicker">How it works</span>
           <h2>From a sentence to a scored lead list</h2>
           <p>Three simple steps, with you in control the whole way.</p>
         </div>
         <ol class="how-grid">
-          <li v-for="h in HOW" :key="h.n">
+          <li v-for="(h, i) in HOW" :key="h.n" class="reveal" :style="{ '--d': i }">
             <span class="how-n">{{ h.n }}</span>
             <h3>{{ h.title }}</h3>
             <p>{{ h.text }}</p>
@@ -652,7 +735,7 @@ function reset() {
     <!-- BUDGET CONTROL -->
     <section id="control" class="lp-section">
       <div class="lp-wrap control-grid">
-        <div>
+        <div class="reveal left">
           <span class="kicker">Budget control</span>
           <h2>Know what you will spend before you spend it</h2>
           <p class="lede dark">
@@ -665,11 +748,11 @@ function reset() {
             <li><span class="tick">✓</span> Reject a run at any time and pay nothing for enrichment</li>
           </ul>
         </div>
-        <div class="control-card" aria-hidden="true">
+        <div class="control-card reveal right" aria-hidden="true">
           <div class="cc-row"><span>Prefilter</span><b>$0.01</b></div>
           <div class="cc-row"><span>Enrichment (6 approved)</span><b>$0.03</b></div>
           <div class="cc-row"><span>Scoring &amp; outreach</span><b>$0.02</b></div>
-          <div class="meter big"><i style="width: 24%"></i></div>
+          <div class="meter big"><i class="fill" style="--w: 24%"></i></div>
           <div class="cc-foot"><span>Illustrative run</span><b>$0.06 of $0.25 cap</b></div>
         </div>
       </div>
@@ -677,7 +760,7 @@ function reset() {
 
     <!-- FINAL CTA -->
     <section class="lp-cta-band">
-      <div class="lp-wrap cta-inner">
+      <div class="lp-wrap cta-inner reveal">
         <h2>Ready to build a better lead list?</h2>
         <p>Create a free account to save customer profiles and keep your run history, or jump straight in as a guest.</p>
         <div class="lp-cta-row center">
@@ -1458,7 +1541,7 @@ p { margin: 0; }
 
 .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .feat { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 26px; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
-.feat:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: #c7ceff; }
+.feat:hover { translate: 0 -5px; box-shadow: var(--shadow-md); border-color: #c7ceff; }
 .feat-icon { width: 46px; height: 46px; border-radius: 12px; background: var(--ultra-soft); display: grid; place-items: center; margin-bottom: 16px; }
 .feat-icon svg, .side-ico svg { width: 22px; height: 22px; fill: none; stroke: var(--ultra); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .feat h3 { font-size: 18px; margin-bottom: 8px; }
@@ -1708,6 +1791,77 @@ p { margin: 0; }
 
 .sidebar-backdrop { display: none; }
 
+/* ==================== LANDING: ANIMATION & GUIDANCE ==================== */
+.landing { overflow-x: clip; }
+.lp-hero, .lp-section, .lp-strip, .lp-cta-band { scroll-margin-top: 68px; }
+
+.reveal { opacity: 0; transform: translateY(32px); transition: opacity 0.75s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.75s cubic-bezier(0.2, 0.7, 0.2, 1), translate 0.2s, box-shadow 0.2s, border-color 0.2s; transition-delay: calc(var(--d, 0) * 110ms), calc(var(--d, 0) * 110ms), 0s, 0s, 0s; will-change: opacity, transform; }
+.reveal.left { transform: translateX(-40px); }
+.reveal.right { transform: translateX(40px); }
+.reveal.zoom { transform: translateY(24px) scale(0.95); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* hero: fills the screen, floating colour orbs, scroll cue */
+.lp-hero { isolation: isolate; padding-bottom: clamp(96px, 11vw, 130px); }
+.lp-hero-bg { z-index: -2; }
+.lp-hero::before, .lp-hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.55; z-index: -1; animation: drift 14s ease-in-out infinite alternate; }
+.lp-hero::before { width: 340px; height: 340px; background: #c9d0ff; top: -70px; right: 12%; }
+.lp-hero::after { width: 280px; height: 280px; background: #ffd9cc; bottom: -50px; left: 6%; animation-delay: -6s; }
+@keyframes drift { to { transform: translate(44px, 32px) scale(1.15); } }
+@media (min-width: 961px) and (min-height: 640px) {
+  .lp-hero { min-height: calc(100vh - 68px); display: flex; align-items: center; }
+  .lp-hero > .lp-wrap { width: 100%; }
+}
+.scroll-cue { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 2; background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+.scroll-cue:hover { color: var(--ultra); }
+.mouse { width: 22px; height: 34px; border: 2px solid currentColor; border-radius: 12px; position: relative; }
+.mouse i { position: absolute; left: 50%; top: 6px; width: 3px; height: 7px; border-radius: 2px; background: var(--ultra); transform: translateX(-50%); animation: wheel 1.6s ease-in-out infinite; }
+@keyframes wheel { 0% { opacity: 0; transform: translate(-50%, 0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 12px); } }
+
+/* hero preview builds itself in sequence */
+.pv-list li { opacity: 0; transform: translateX(18px); transition: opacity 0.5s ease, transform 0.5s ease; transition-delay: calc(0.5s + var(--i, 0) * 0.15s); }
+.lp-preview.in .pv-list li { opacity: 1; transform: none; }
+.pv-dist span { transform-origin: left; transform: scaleX(0); transition: transform 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.35s; }
+.lp-preview.in .pv-dist span { transform: scaleX(1); }
+
+/* budget meter fills when it scrolls into view */
+.meter.big i.fill { width: 0; transition: width 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s; }
+.control-card.in .meter.big i.fill { width: var(--w); }
+.how-grid li.in .how-n { animation: pop 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; animation-delay: calc(var(--d, 0) * 110ms + 0.25s); }
+@keyframes pop { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* nav: scroll progress bar, active link underline, shadow once scrolled */
+.lp-nav { transition: box-shadow 0.25s, background 0.25s; }
+.lp-nav.scrolled { box-shadow: 0 6px 24px rgba(15, 26, 58, 0.08); background: rgba(255, 255, 255, 0.96); }
+.lp-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; }
+.lp-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--ultra), #7b5cff, var(--flame)); transition: width 0.12s linear; }
+.lp-link { position: relative; }
+.lp-link::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 3px; height: 2px; border-radius: 2px; background: var(--ultra); transform: scaleX(0); transition: transform 0.25s; }
+.lp-link.active { color: var(--ultra); }
+.lp-link.active::after { transform: scaleX(1); }
+
+/* side section dots + back-to-top */
+.side-dots { position: fixed; right: 20px; top: 50%; transform: translateY(-50%); z-index: 55; display: flex; flex-direction: column; gap: 16px; }
+.dot-nav { position: relative; width: 12px; height: 12px; padding: 0; border-radius: 50%; border: 2px solid #9aa3c7; background: #fff; cursor: pointer; transition: all 0.25s; }
+.dot-nav:hover { border-color: var(--ultra); }
+.dot-nav.active { background: var(--ultra); border-color: var(--ultra); transform: scale(1.3); }
+.dot-nav span { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.dot-nav:hover span, .dot-nav.active span { opacity: 1; }
+.to-top { position: fixed; right: 18px; bottom: 18px; z-index: 55; width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--ink); color: #fff; font-size: 20px; cursor: pointer; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transform: translateY(12px); transition: all 0.3s; }
+.to-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.to-top:hover { background: var(--ultra); }
+
+/* login + workspace entrance animations */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.auth-card { animation: fadeUp 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.auth-side-copy { animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.side-points li { animation: fadeUp 0.6s both; }
+.side-points li:nth-child(1) { animation-delay: 0.25s; }
+.side-points li:nth-child(2) { animation-delay: 0.4s; }
+.side-points li:nth-child(3) { animation-delay: 0.55s; }
+.hero, .page-title { animation: fadeUp 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.auth-page { min-height: 100dvh; }
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 960px) {
   .menu-toggle { display: inline-block; }
@@ -1745,7 +1899,61 @@ p { margin: 0; }
   .budget, .badge { display: none; }
   .pv-float { display: none; }
 }
+/* large desktops */
+@media (min-width: 1500px) {
+  .lp-wrap, .lp-nav-inner { max-width: 1280px; }
+  .main-content { max-width: 1160px; }
+  .lp-hero h1 { font-size: 68px; }
+}
+/* small laptops / tablets landscape */
+@media (max-width: 1100px) {
+  .side-dots { display: none; }
+  .feat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* tablets & large phones */
+@media (max-width: 960px) {
+  .reveal.left, .reveal.right { transform: translateY(32px); }
+  .lp-hero { padding-top: 40px; }
+  .scroll-cue { display: none; }
+  .lp-hero { padding-bottom: 64px; }
+}
+@media (max-width: 768px) {
+  .lp-hero h1 { font-size: clamp(32px, 8.4vw, 46px); }
+  .composer-row .btn { flex: 1; }
+  .app-footer { flex-direction: column; align-items: flex-start; }
+  .history-row { flex-direction: column; align-items: flex-start; }
+}
+/* phones */
+@media (max-width: 480px) {
+  .lp-nav-inner { height: 60px; }
+  .lp-links { top: 60px; }
+  .lp-cta-row .btn { width: 100%; }
+  .lp-trust { gap: 10px 16px; font-size: 13px; }
+  .strip-grid { gap: 18px 12px; }
+  .feat, .how-grid li, .control-card { padding: 20px; }
+  .auth-card h1 { font-size: 26px; }
+  .auth-main { padding-left: 16px; padding-right: 16px; }
+  .app-header { padding: 0 12px; }
+  .avatar-name { display: none; }
+  .avatar-btn { padding: 4px; }
+  .main-content { padding-top: 18px; }
+  .card { padding: 16px; }
+  .hero h1 { font-size: 27px; }
+  .composer { padding-left: 14px; }
+  .chip { font-size: 12px; }
+  .res { grid-template-columns: 20px 40px 1fr 48px; gap: 10px; padding: 12px; }
+  .logo { width: 40px; height: 40px; }
+  .ring { width: 46px; height: 46px; }
+  .lead { grid-template-columns: 20px 40px 1fr; gap: 10px; padding: 10px; }
+  .decide { padding: 12px; }
+  .decide .row-gap, .decide .row-gap .btn { width: 100%; }
+  .steps li { padding-right: 8px; font-size: 13px; }
+  .stamp { padding: 4px 18px; border-width: 4px; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  .reveal, .pv-list li { opacity: 1 !important; transform: none !important; }
+  .pv-dist span { transform: none !important; }
+  .meter.big i.fill { width: var(--w) !important; }
 }
 </style>
