@@ -1305,6 +1305,7 @@ function reset() {
 @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap");
 
 :root {
+  color-scheme: light;
   --paper: #f3f5fa;
   --surface: #fff;
   --ink: #0f1a3a;
@@ -1350,6 +1351,12 @@ body {
 button, input, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--ultra); outline-offset: 2px; }
 h1, h2, h3 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
+/* Force readable heading colours even if a global stylesheet (e.g. Vite's style.css) sets h1 to white */
+.landing h1, .landing h2, .landing h3,
+.auth-page h1, .auth-page h2, .auth-page h3,
+.app-shell h1, .app-shell h2, .app-shell h3 { color: var(--ink); opacity: 1; }
+.cta-inner h2, .auth-side-copy h2 { color: #fff; }
+.lp-hero h1 { color: var(--ink); }
 p { margin: 0; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 .tick { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #d9f5ea; color: var(--ok); font-size: 11px; font-weight: 800; flex-shrink: 0; }
