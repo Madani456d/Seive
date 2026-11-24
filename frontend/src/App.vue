@@ -1034,8 +1034,10 @@ function reset() {
 }
 
 body {
-  display: block;
-  place-items: initial;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
   min-width: 0;
   margin: 0;
   background: var(--paper);
@@ -1043,7 +1045,17 @@ body {
   font: 400 15px/1.5 var(--body);
   -webkit-font-smoothing: antialiased;
 }
-#app { width: 100%; max-width: none; margin: 0; padding: 0; text-align: left; }
+#app {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
 *, *::before, *::after { box-sizing: border-box; }
 button, input, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--ultra); outline-offset: 2px; }
@@ -1053,6 +1065,7 @@ h1, h2, h3 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
 /* ==================== FIRST-SCREEN LOGIN + SKIP GATE ==================== */
 .auth-gate {
   min-height: 100vh;
+  width: 100%;
   display: grid;
   place-items: center;
   padding: 24px 16px;
@@ -1150,6 +1163,7 @@ h1, h2, h3 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
 /* ==================== APP SHELL ==================== */
 .app-shell {
   min-height: 100vh;
+  width: 100%;
   display: flex;
   flex-direction: column;
 }
