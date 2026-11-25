@@ -1,38 +1,40 @@
-﻿const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+﻿const DEFAULT_API_BASE = "https://seive-1.onrender.com";
+const RAW_BASE = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
 
-export function getSession() {
+export const API_BASE = String(RAW_BASE).trim().replace(/\/+$/, "");
+
+export function buildApiUrl(path = "") {
+  const cleanPath = String(path).replace(/^\/+/, "");
+  return cleanPath ? `${API_BASE}/${cleanPath}` : API_BASE;
+}
+
+export async function apiRequest(path, options = {}, timeoutMs = 45000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = buildApiUrl(path);
+
   try {
-    return JSON.parse(localStorage.getItem("lead_platform_session") || "null");
-  } catch {
-    return null;
-  }
-}
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers || {}),
+      },
+    });
 
-export function saveSession(data) {
-  localStorage.setItem("lead_platform_session", JSON.stringify(data));
-}
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`HTTP ${response.status} from ${url}: ${text || response.statusText}`);
+    }
 
-export function clearSession() {
-  localStorage.removeItem("lead_platform_session");
-}
-
-export async function apiFetch(path, options = {}) {
-  const session = getSession();
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
+    return response;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs / 1000}s`);
+    }
+    throw new Error(`Network error calling ${url}: ${err.message}`);
+  } finally {
+    clearTimeout(timer);
   }
-
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  if (res.status === 401) {
-    clearSession();
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.detail || `Request failed (${res.status})`);
-  }
-  return data;
 }
