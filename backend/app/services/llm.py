@@ -11,18 +11,16 @@ T = TypeVar("T", bound=BaseModel)
 _client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 FALLBACK_MODELS = [
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
 ]
 
 
 def call_gemini_structured(
     prompt: str,
     response_schema: Type[T],
-    model: str = "gemini-3.8-flash",
+    model: str = "gemini-2.5-flash-lite",
 ) -> tuple[T, float]:
     if _client is None:
         raise RuntimeError("GEMINI_API_KEY is missing in .env")
@@ -56,11 +54,11 @@ def call_gemini_structured(
             except errors.ServerError as e:
                 last_error = e
                 if attempt == 0:
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
-                break  # move to next fallback model
+                break
             except errors.ClientError as e:
                 last_error = e
-                break  # 404/429 -> immediately try next fallback model
+                break
 
     raise last_error
