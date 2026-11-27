@@ -14,7 +14,7 @@ export function saveSession(sessionData) {
   try {
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData ?? null));
   } catch {
-    // Ignore storage quota or private-mode errors
+    // Ignore storage errors
   }
 }
 
