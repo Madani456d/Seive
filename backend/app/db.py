@@ -1,6 +1,7 @@
 import hashlib
 import os
 import secrets
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from psycopg_pool import AsyncConnectionPool
 
 
@@ -13,15 +14,22 @@ def get_database_url() -> str:
         raise RuntimeError(
             "Invalid DATABASE_URL: must start with 'postgresql://' or 'postgres://'."
         )
-    return raw_url
+
+    parsed = urlparse(raw_url)
+    query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query_params.setdefault("sslmode", "require")
+    updated_query = urlencode(query_params)
+    return urlunparse(parsed._replace(query=updated_query))
 
 
 def create_db_pool() -> AsyncConnectionPool:
     conninfo = get_database_url()
     return AsyncConnectionPool(
         conninfo=conninfo,
+        min_size=1,
+        max_size=2,
         open=False,
-        kwargs={"autocommit": True},
+        kwargs={"autocommit": True, "prepare_threshold": 0},
     )
 
 
