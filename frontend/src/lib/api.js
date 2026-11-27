@@ -13,9 +13,7 @@ export function saveSession(sessionData) {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData ?? null));
-  } catch {
-    // Ignore storage quota or private-mode errors
-  }
+  } catch {}
 }
 
 export function getSession() {
@@ -32,16 +30,13 @@ export function clearSession() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    // Ignore storage errors
-  }
+  } catch {}
 }
 
 export async function apiFetch(path, options = {}, timeoutMs = 60000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const url = buildApiUrl(path);
-
   const session = getSession();
   const token = session?.access_token || session?.token || null;
 
