@@ -11,21 +11,26 @@ T = TypeVar("T", bound=BaseModel)
 _client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
 FALLBACK_MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
+    settings.gemini_fast_model,
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    settings.gemini_planner_model,
+    "gemini-3.8-flash",
 ]
 
 
 def call_gemini_structured(
     prompt: str,
     response_schema: Type[T],
-    model: str = "gemini-2.5-flash-lite",
+    model: str | None = None,
 ) -> tuple[T, float]:
     if _client is None:
         raise RuntimeError("GEMINI_API_KEY is missing in .env")
 
-    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    primary_model = model or settings.gemini_fast_model or "gemini-3.1-flash-lite"
+    candidates = list(
+        dict.fromkeys([primary_model] + [m for m in FALLBACK_MODELS if m])
+    )
     last_error = None
 
     for candidate in candidates:

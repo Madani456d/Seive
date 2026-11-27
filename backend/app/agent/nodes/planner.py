@@ -30,7 +30,7 @@ def planner_node(state: AgentState) -> dict:
     plan, cost_usd = call_gemini_structured(
         prompt=prompt,
         response_schema=ICPPlan,
-        model="gemini-2.5-flash-lite",
+        model=settings.gemini_planner_model,
     )
 
     return {
