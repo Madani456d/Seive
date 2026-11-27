@@ -16,6 +16,10 @@ BLOCKED_DOMAINS = {
     "clutch.co",
     "glassdoor.com",
     "indeed.com",
+    "foundit.in",
+    "founditgulf.com",
+    "naukri.com",
+    "monster.com",
     "wellfound.com",
     "ycombinator.com",
     "pitchbook.com",
@@ -25,6 +29,7 @@ BLOCKED_DOMAINS = {
     "forbes.com",
     "techcrunch.com",
     "bloomberg.com",
+    "fintechweekly.com",
     "wikipedia.org",
 }
 
@@ -62,8 +67,14 @@ def _dedupe_and_clean(raw_leads: list) -> list:
 
 
 def _compact_lead(lead: object) -> dict:
-    item = lead.model_dump() if hasattr(lead, "model_dump") else (dict(lead) if isinstance(lead, dict) else {})
-    snippet = str(item.get("snippet") or item.get("description") or item.get("summary") or "")
+    item = (
+        lead.model_dump()
+        if hasattr(lead, "model_dump")
+        else (dict(lead) if isinstance(lead, dict) else {})
+    )
+    snippet = str(
+        item.get("snippet") or item.get("description") or item.get("summary") or ""
+    )
     return {
         "domain": _extract_domain(lead),
         "company_name": str(item.get("company_name") or item.get("name") or "")[:80],
@@ -85,7 +96,10 @@ def prefilter_node(state: AgentState) -> dict:
     # Fast path (0 ms): skip LLM call when deterministic cleaning already fits within max_leads
     if settings.mock_mode or len(cleaned_leads) <= max_leads:
         elapsed = time.perf_counter() - t0
-        print(f"[prefilter] Fast-kept {len(cleaned_leads[:max_leads])} leads in {elapsed:.4f}s", flush=True)
+        print(
+            f"[prefilter] Fast-kept {len(cleaned_leads[:max_leads])} leads in {elapsed:.4f}s",
+            flush=True,
+        )
         return {
             "prefiltered_leads": cleaned_leads[:max_leads],
             "budget_spent_usd": round(min(cap, spent), 6),
@@ -102,7 +116,10 @@ def prefilter_node(state: AgentState) -> dict:
     icp_plan = state.get("icp_plan")
     compact_payload = [_compact_lead(lead) for lead in cleaned_leads]
 
-    fast_model = getattr(settings, "gemini_fast_model", "gemini-2.5-flash-lite") or "gemini-2.5-flash-lite"
+    fast_model = (
+        getattr(settings, "gemini_fast_model", "gemini-3.1-flash-lite")
+        or "gemini-3.1-flash-lite"
+    )
     prompt = (
         f"Select up to {max_leads} real target company domains matching this ICP "
         f"(exclude recruiters, news sites, directories, and unrelated orgs).\n"
@@ -116,10 +133,11 @@ def prefilter_node(state: AgentState) -> dict:
             response_schema=PrefilterResult,
             model=fast_model,
         )
-        kept_set = {d.lower().strip().removeprefix("www.") for d in result.kept_domains}
+        kept_set = {
+            d.lower().strip().removeprefix("www.") for d in result.kept_domains
+        }
         filtered = [
-            lead for lead in cleaned_leads
-            if _extract_domain(lead) in kept_set
+            lead for lead in cleaned_leads if _extract_domain(lead) in kept_set
         ][:max_leads]
     except Exception as exc:
         print(f"[prefilter] Fallback after error: {exc}", flush=True)
@@ -131,7 +149,10 @@ def prefilter_node(state: AgentState) -> dict:
 
     updated_spent = round(min(cap, spent + float(cost_usd or 0.0)), 6)
     elapsed = time.perf_counter() - t0
-    print(f"[prefilter] Filtered {len(raw_leads)} -> {len(filtered)} in {elapsed:.2f}s", flush=True)
+    print(
+        f"[prefilter] Filtered {len(raw_leads)} -> {len(filtered)} in {elapsed:.2f}s",
+        flush=True,
+    )
     return {
         "prefiltered_leads": filtered,
         "budget_spent_usd": updated_spent,
