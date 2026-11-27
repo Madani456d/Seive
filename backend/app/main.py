@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import os
 import sys
 import time
@@ -29,7 +29,6 @@ from app.agent.graph import build_graph  # noqa: E402
 from app.core.auth import create_access_token, decode_access_token, get_current_user  # noqa: E402
 from app.core.budget import BudgetExceededError  # noqa: E402
 from app.core.config import settings  # noqa: E402
-from app.db import get_database_url  # noqa: E402
 from app.db.tables import hash_password, init_app_tables, verify_password  # noqa: E402
 
 
@@ -78,6 +77,26 @@ def get_optional_user(authorization: str | None = Header(default=None)) -> dict 
         return None
 
 
+def _resolve_db_url() -> str:
+    candidate = (
+        os.getenv("DATABASE_URL")
+        or getattr(settings, "database_url", None)
+        or getattr(settings, "DATABASE_URL", "")
+        or ""
+    ).strip()
+    if candidate.startswith("DATABASE_URL="):
+        candidate = candidate.split("=", 1)[1].strip()
+    candidate = candidate.strip('"').strip("'")
+    if not candidate.startswith(("postgresql://", "postgres://")):
+        raise RuntimeError(
+            "Invalid DATABASE_URL: expected a connection string starting with 'postgresql://' or 'postgres://'."
+        )
+    if "supabase.com" in candidate and "sslmode=" not in candidate:
+        sep = "&" if "?" in candidate else "?"
+        candidate = f"{candidate}{sep}sslmode=require"
+    return candidate
+
+
 def _extract_leads(vals: dict, payload_dict: dict | None = None) -> list[dict]:
     p = payload_dict or {}
     return (
@@ -121,7 +140,7 @@ async def _upsert_run_history(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    conninfo = get_database_url()
+    conninfo = _resolve_db_url()
     pool = AsyncConnectionPool(
         conninfo=conninfo,
         min_size=1,
