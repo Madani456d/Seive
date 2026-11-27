@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -15,8 +16,9 @@ if sys.platform == "win32":
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(ENV_PATH, override=True)
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status  # noqa: E402
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 from psycopg.rows import dict_row  # noqa: E402
@@ -27,6 +29,7 @@ from app.agent.graph import build_graph  # noqa: E402
 from app.core.auth import create_access_token, decode_access_token, get_current_user  # noqa: E402
 from app.core.budget import BudgetExceededError  # noqa: E402
 from app.core.config import settings  # noqa: E402
+from app.db import get_database_url  # noqa: E402
 from app.db.tables import hash_password, init_app_tables, verify_password  # noqa: E402
 
 
@@ -75,23 +78,6 @@ def get_optional_user(authorization: str | None = Header(default=None)) -> dict 
         return None
 
 
-def _resolve_db_url() -> str:
-    candidate = (
-        os.getenv("DATABASE_URL")
-        or getattr(settings, "database_url", None)
-        or getattr(settings, "DATABASE_URL", "")
-        or ""
-    ).strip()
-    if candidate.startswith("DATABASE_URL="):
-        candidate = candidate.split("=", 1)[1].strip()
-    candidate = candidate.strip('"').strip("'")
-    if not candidate.startswith(("postgresql://", "postgres://")):
-        raise RuntimeError(
-            "Invalid DATABASE_URL: expected a connection string starting with 'postgresql://' or 'postgres://'."
-        )
-    return candidate
-
-
 def _extract_leads(vals: dict, payload_dict: dict | None = None) -> list[dict]:
     p = payload_dict or {}
     return (
@@ -135,10 +121,11 @@ async def _upsert_run_history(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    conninfo = _resolve_db_url()
+    conninfo = get_database_url()
     pool = AsyncConnectionPool(
         conninfo=conninfo,
-        max_size=10,
+        min_size=1,
+        max_size=2,
         kwargs={"autocommit": True, "prepare_threshold": 0},
         open=False,
     )
@@ -172,6 +159,16 @@ app = FastAPI(
     openapi_url="/openapi.json" if is_dev else None,
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
+
 
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
 allowed_origins = [
@@ -382,6 +379,7 @@ async def start_run(
     req: StartRunRequest,
     current_user: dict | None = Depends(get_optional_user),
 ):
+    t0 = time.perf_counter()
     run_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": run_id}}
     clean_query = req.icp_query.strip()
@@ -395,11 +393,21 @@ async def start_run(
         "budget_spent_usd": 0.0,
     }
 
+    print(f"[runs:{run_id}] Starting ainvoke", flush=True)
     try:
-        await app.state.graph.ainvoke(initial_state, config=config)
+        await asyncio.wait_for(
+            app.state.graph.ainvoke(initial_state, config=config),
+            timeout=45.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"Graph ainvoke timed out after {time.perf_counter() - t0:.1f}s",
+        )
     except BudgetExceededError as exc:
         raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc))
 
+    print(f"[runs:{run_id}] ainvoke done at {time.perf_counter() - t0:.2f}s; fetching state", flush=True)
     snapshot = await app.state.graph.aget_state(config)
     vals = snapshot.values or {}
     spent = float(vals.get("budget_spent_usd", 0.0))
@@ -418,6 +426,7 @@ async def start_run(
             leads_count=len(leads),
             spent_usd=spent,
         )
+        print(f"[runs:{run_id}] Completed awaiting_approval in {time.perf_counter() - t0:.2f}s", flush=True)
 
         return {
             **payload_dict,
