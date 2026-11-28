@@ -31,9 +31,13 @@ BLOCKED_DOMAINS = {
     "bloomberg.com",
     "fintechweekly.com",
     "wikipedia.org",
+    "youtube.com",
+    "a16z.com",
+    "cbinsights.com",
+    "rockethub.com",
+    "planmysaas.com",
+    "fintechspecs.com",
 }
-
-
 class PrefilterResult(BaseModel):
     kept_domains: list[str]
 
